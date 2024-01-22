@@ -1,13 +1,12 @@
 // To read command line arguments
-use std::env::args;
+use std::env;
 use std::process;
 
 // Our library things
 use rgrep::{run, Config};
 
 fn main() {
-    let cmd_args: Vec<String> = args().collect();
-    let config = Config::build(&cmd_args).unwrap_or_else(|err| {
+    let config = Config::build(env::args()).unwrap_or_else(|err| {
         eprintln!("{err}");
         process::exit(1);
     });

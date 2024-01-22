@@ -7,21 +7,27 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn build(cmd_args: &[String]) -> Result<Self, String> {
+    pub fn build(mut cmd_args: impl Iterator<Item = String>) -> Result<Self, String> {
+        let usage_string = "./rgrep <string-to-search> <file-path>";
         /*
-         * Handling insufficient cmd line args. In Rust, Suppose if user calls binary with ./out_binary arg1 arg2 then rust receives 3 args. Rust includes binary name as first arg so even if no args are given then there will be 1 arg always just like in c. So user should only know the number of args they give not the implicit arg rust takes.
+         * Handling insufficient cmd line args. In Rust, Suppose if user calls binary with ./out_binary arg1 arg2 then
+         * rust receives 3 args. Rust includes binary name as first arg so even if no args are given then there will be
+         * 1 arg always just like in c. So user should only know the number of args they give not the implicit arg rust takes.
          */
-        if cmd_args.len() < 3 {
-            return Err(format!(
-                "Expected 2 arguments but received {}",
-                cmd_args.len() - 1
-            ));
-        }
+        // ignoring file name
+        cmd_args.next();
 
-        let query = cmd_args[1].clone();
-        let file_path = cmd_args[2].clone();
+        let query = match cmd_args.next() {
+            Some(arg) => arg,
+            None => return Err(format!("Required parameter query string not found\n{usage_string}")),
+        };
+
+        let file_path = match cmd_args.next() {
+            Some(arg) => arg,
+            None => return Err(format!("Required parameter file path not found \n{usage_string}")),
+        };
+
         let ignore_case: bool = env::var("RGREP_IGNORE_CASE").is_ok();
-
         Ok(Config {
             query,
             file_path,
@@ -31,11 +37,19 @@ impl Config {
 }
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
-    let contents = fs::read_to_string(config.file_path)?;
+    let contents = fs::read_to_string(&config.file_path)?;
 
     let search_results = if config.ignore_case {
+        println!(
+            "Performing case insensitive search for {} in {} as RGREP_IGNORE_CASE is set\n",
+            config.query, config.file_path
+        );
         search_case_insensitive(&config.query, &contents)
     } else {
+        println!(
+            "Performing case sensitive search for {} in {} as RGREP_IGNORE_CASE is not set\n",
+            config.query, config.file_path
+        );
         search(&config.query, &contents)
     };
     for line in search_results {
@@ -46,29 +60,20 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
 }
 
 pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
-    let mut result_vec = Vec::new();
-
-    for line in contents.lines() {
-        if line.contains(query) {
-            result_vec.push(line);
-        }
-    }
-
-    result_vec
+    contents
+        .lines()
+        .filter(|line| line.contains(query))
+        .collect()
 }
 
 pub fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
-    let mut result_vec = Vec::new();
     // This variable lifetime will only be until end of this function. Shadowing !!!
     let query = query.to_lowercase();
 
-    for line in contents.lines() {
-        if line.to_lowercase().contains(&query) {
-            result_vec.push(line);
-        }
-    }
-
-    result_vec
+    contents
+        .lines()
+        .filter(|line| line.to_lowercase().contains(&query))
+        .collect()
 }
 
 #[cfg(test)]
